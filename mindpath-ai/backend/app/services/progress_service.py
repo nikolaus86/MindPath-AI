@@ -1,13 +1,17 @@
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import ProgressEntry, User
 
 
 class ProgressService:
     @staticmethod
-    def create_entry(
-        db: Session, user: User, mood_score: int, note: str, session_id: int | None = None
+    async def create_entry(
+        db: AsyncSession,
+        user: User,
+        mood_score: int,
+        note: str,
+        session_id: int | None = None,
     ) -> ProgressEntry:
         entry = ProgressEntry(
             user_id=user.id,
@@ -16,19 +20,18 @@ class ProgressService:
             note=note.strip(),
         )
         db.add(entry)
-        db.commit()
-        db.refresh(entry)
+        await db.commit()
+        await db.refresh(entry)
         return entry
 
     @staticmethod
-    def list_entries(db: Session, user: User) -> list[ProgressEntry]:
-        return list(
-            db.scalars(
-                select(ProgressEntry)
-                .where(ProgressEntry.user_id == user.id)
-                .order_by(ProgressEntry.created_at.desc())
-            )
+    async def list_entries(db: AsyncSession, user: User) -> list[ProgressEntry]:
+        result = await db.scalars(
+            select(ProgressEntry)
+            .where(ProgressEntry.user_id == user.id)
+            .order_by(ProgressEntry.created_at.desc())
         )
+        return list(result.all())
 
     @staticmethod
     def average_mood(entries: list[ProgressEntry]) -> float | None:

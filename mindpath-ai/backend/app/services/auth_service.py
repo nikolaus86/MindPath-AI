@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import User
 
@@ -58,7 +58,7 @@ class AuthService:
         return base64.urlsafe_b64encode(raw_token.encode("utf-8")).decode("utf-8")
 
     @staticmethod
-    def get_user_from_token(db: Session, token: str) -> User | None:
+    async def get_user_from_token(db: AsyncSession, token: str) -> User | None:
         try:
             decoded = base64.urlsafe_b64decode(token.encode("utf-8")).decode("utf-8")
             user_id_text, email, expires_at_text, signature = decoded.rsplit(":", 3)
@@ -74,15 +74,15 @@ class AuthService:
         except (ValueError, UnicodeDecodeError):
             return None
 
-        return db.get(User, user_id)
+        return await db.get(User, user_id)
 
     @staticmethod
-    def register(db: Session, email: str, password: str) -> AuthResult:
+    async def register(db: AsyncSession, email: str, password: str) -> AuthResult:
         normalized_email = AuthService.normalize_email(email)
         if "@" not in normalized_email or "." not in normalized_email:
             raise HTTPException(status_code=400, detail="Enter a valid email address")
 
-        existing_user = db.scalar(select(User).where(User.email == normalized_email))
+        existing_user = await db.scalar(select(User).where(User.email == normalized_email))
         if existing_user is not None:
             raise HTTPException(status_code=400, detail="Email is already registered")
 
@@ -91,14 +91,14 @@ class AuthService:
             password_hash=AuthService.hash_password(password),
         )
         db.add(user)
-        db.commit()
-        db.refresh(user)
+        await db.commit()
+        await db.refresh(user)
         return AuthResult(user=user, access_token=AuthService.create_token(user))
 
     @staticmethod
-    def login(db: Session, email: str, password: str) -> AuthResult:
+    async def login(db: AsyncSession, email: str, password: str) -> AuthResult:
         normalized_email = AuthService.normalize_email(email)
-        user = db.scalar(select(User).where(User.email == normalized_email))
+        user = await db.scalar(select(User).where(User.email == normalized_email))
         if user is None or not AuthService.verify_password(password, user.password_hash):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,

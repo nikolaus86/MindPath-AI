@@ -10,6 +10,8 @@ import type { ContextFile, Message, Session } from "@/lib/types";
 type ChatResponse = {
   user_message: Message;
   assistant_message: Message;
+  suggested_app?: string | null;
+  suggested_app_title?: string | null;
 };
 
 type RouteResponse = {
@@ -34,6 +36,7 @@ function ChatContent() {
   const [text, setText] = useState("");
   const [context, setContext] = useState<ContextFile | null>(null);
   const [route, setRoute] = useState<RouteResponse | null>(null);
+  const [suggestedApp, setSuggestedApp] = useState<ChatResponse | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -80,6 +83,9 @@ function ChatContent() {
       setText("");
       setContext(null);
       setRoute(null);
+      setSuggestedApp(
+        response.suggested_app && response.suggested_app_title ? response : null
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not send message");
     }
@@ -111,6 +117,7 @@ function ChatContent() {
       });
       setRoute(response);
       setContext(response.context);
+      setSuggestedApp(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not route session");
     }
@@ -135,6 +142,20 @@ function ChatContent() {
             ))}
             {messages.length === 0 && <p>No messages yet. Start by describing your problem.</p>}
           </div>
+
+          {suggestedApp?.suggested_app && sessionId && (
+            <div className="list-item">
+              <strong>AI suggests: {suggestedApp.suggested_app_title}</strong>
+              <div className="actions">
+                <Link
+                  className="button"
+                  href={`/apps/${suggestedApp.suggested_app}?session=${sessionId}`}
+                >
+                  Open mini-app
+                </Link>
+              </div>
+            </div>
+          )}
 
           <form className="form" onSubmit={sendMessage}>
             <label>

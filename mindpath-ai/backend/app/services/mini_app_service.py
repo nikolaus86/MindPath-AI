@@ -3,56 +3,11 @@ from typing import Any
 
 from fastapi import HTTPException
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models import MiniAppResult, SessionModel
-
-MINI_APPS = {
-    "problem-analysis": {
-        "id": "problem-analysis",
-        "title": "Problem Analysis",
-        "description": "Structure the main problem and find a first small step.",
-        "questions": [
-            "What is the main problem?",
-            "When did it start?",
-            "What makes it difficult?",
-            "What result would feel helpful?",
-        ],
-    },
-    "anxiety-helper": {
-        "id": "anxiety-helper",
-        "title": "Anxiety Helper",
-        "description": "Balance a worry with facts and choose one safe action.",
-        "questions": [
-            "What exactly are you worried about?",
-            "What facts support this worry?",
-            "What facts make it less certain?",
-            "What is one safe small action today?",
-        ],
-    },
-    "decision-assistant": {
-        "id": "decision-assistant",
-        "title": "Decision Assistant",
-        "description": "Compare options, pros, cons, and the main risk.",
-        "questions": [
-            "What decision do you need to make?",
-            "What options do you have?",
-            "What are the pros and cons?",
-            "What is the main risk?",
-        ],
-    },
-    "goal-planner": {
-        "id": "goal-planner",
-        "title": "Goal Planner",
-        "description": "Turn a goal into a short weekly action plan.",
-        "questions": [
-            "What goal do you want to reach?",
-            "Why is it important?",
-            "What deadline do you have?",
-            "What are 3 small steps?",
-        ],
-    },
-}
+from ..mini_apps_catalog import MINI_APPS
+from ..models import Message, MiniAppResult, SessionModel
+from .llm_service import LlmService
 
 
 class MiniAppService:
@@ -68,11 +23,45 @@ class MiniAppService:
         return app
 
     @staticmethod
-    def save_answers(
-        db: Session, session: SessionModel, app_id: str, answers: dict[str, Any]
+    async def _session_chat_context(db: AsyncSession, session: SessionModel) -> str:
+        result = await db.scalars(
+            select(Message)
+            .where(Message.session_id == session.id)
+            .order_by(Message.created_at.asc())
+            .limit(20)
+        )
+        messages = list(result.all())
+        if not messages:
+            return ""
+        lines = []
+        for message in messages:
+            role = "User" if message.role == "user" else "Assistant"
+            lines.append(f"{role}: {message.text}")
+        return "\n".join(lines)
+
+    @staticmethod
+    async def request_insight(
+        db: AsyncSession, session: SessionModel, app_id: str, answers: dict[str, Any]
+    ) -> tuple[str, bool]:
+        app = MiniAppService.get_app(app_id)
+        context = await MiniAppService._session_chat_context(db, session)
+        return await LlmService.mini_app_insight(
+            app_id,
+            app["title"],
+            app["questions"],
+            answers,
+            session_context=context,
+        )
+
+    @staticmethod
+    async def save_answers(
+        db: AsyncSession, session: SessionModel, app_id: str, answers: dict[str, Any]
     ) -> MiniAppResult:
-        MiniAppService.get_app(app_id)
-        result_text = MiniAppService.generate_result(app_id, answers)
+        app = MiniAppService.get_app(app_id)
+        context = await MiniAppService._session_chat_context(db, session)
+        result_text = await MiniAppService.generate_result(
+            app_id, app, answers, session_context=context
+        )
         result = MiniAppResult(
             session_id=session.id,
             app_id=app_id,
@@ -80,22 +69,39 @@ class MiniAppService:
             result_text=result_text,
         )
         db.add(result)
-        db.commit()
-        db.refresh(result)
+        await db.commit()
+        await db.refresh(result)
         return result
 
     @staticmethod
-    def list_results(db: Session, session: SessionModel) -> list[MiniAppResult]:
-        return list(
-            db.scalars(
-                select(MiniAppResult)
-                .where(MiniAppResult.session_id == session.id)
-                .order_by(MiniAppResult.created_at.desc())
-            )
+    async def list_results(db: AsyncSession, session: SessionModel) -> list[MiniAppResult]:
+        result = await db.scalars(
+            select(MiniAppResult)
+            .where(MiniAppResult.session_id == session.id)
+            .order_by(MiniAppResult.created_at.desc())
         )
+        return list(result.all())
 
     @staticmethod
-    def generate_result(app_id: str, answers: dict[str, Any]) -> str:
+    async def generate_result(
+        app_id: str,
+        app: dict[str, Any],
+        answers: dict[str, Any],
+        session_context: str = "",
+    ) -> str:
+        llm_text = await LlmService.mini_app_result(
+            app_id,
+            app["title"],
+            app["questions"],
+            answers,
+            session_context=session_context,
+        )
+        if llm_text:
+            return llm_text
+        return MiniAppService._template_result(app_id, answers)
+
+    @staticmethod
+    def _template_result(app_id: str, answers: dict[str, Any]) -> str:
         values = [str(value).strip() for value in answers.values() if str(value).strip()]
         first = values[0] if values else "Not enough information"
         second = values[1] if len(values) > 1 else "Needs more detail"

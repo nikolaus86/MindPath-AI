@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { apiRequest, getCurrentSession } from "@/lib/api";
-import type { MiniAppDefinition, MiniAppResult } from "@/lib/types";
+import type { MiniAppDefinition, MiniAppInsight, MiniAppResult } from "@/lib/types";
 
 const localDefinitions: Record<string, MiniAppDefinition> = {
   "problem-analysis": {
@@ -58,6 +58,8 @@ export default function MiniAppForm({ appId }: { appId: string }) {
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [result, setResult] = useState<MiniAppResult | null>(null);
+  const [insight, setInsight] = useState<MiniAppInsight | null>(null);
+  const [insightLoading, setInsightLoading] = useState(false);
   const [error, setError] = useState("");
 
   const summaryLink = useMemo(() => {
@@ -83,6 +85,33 @@ export default function MiniAppForm({ appId }: { appId: string }) {
 
   function updateAnswer(index: number, value: string) {
     setAnswers((current) => ({ ...current, [`q${index + 1}`]: value }));
+  }
+
+  async function requestInsight() {
+    if (!sessionId) {
+      setError("Create or open a session first.");
+      return;
+    }
+
+    const hasAnswer = Object.values(answers).some((value) => value.trim());
+    if (!hasAnswer) {
+      setError("Fill in at least one answer to get an AI insight.");
+      return;
+    }
+
+    setError("");
+    setInsightLoading(true);
+    try {
+      const response = await apiRequest<MiniAppInsight>(`/mini-apps/${appId}/insight`, {
+        method: "POST",
+        body: JSON.stringify({ session_id: sessionId, answers })
+      });
+      setInsight(response);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not get AI insight");
+    } finally {
+      setInsightLoading(false);
+    }
   }
 
   async function submitAnswers(event: FormEvent) {
@@ -126,10 +155,28 @@ export default function MiniAppForm({ appId }: { appId: string }) {
         ))}
         {error && <p className="error">{error}</p>}
         <div className="actions">
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={requestInsight}
+            disabled={insightLoading}
+          >
+            {insightLoading ? "Getting insight…" : "Get AI insight"}
+          </button>
           <button className="button" type="submit">Save result</button>
           <Link className="secondary-button" href={summaryLink}>Open summary</Link>
         </div>
       </form>
+
+      {insight && (
+        <div className="panel">
+          <h3>AI insight{insight.llm_used ? "" : " (offline mode)"}</h3>
+          <p>{insight.insight}</p>
+          <p className="eyebrow">
+            Insight is a preview — save the form when you are ready for the final result.
+          </p>
+        </div>
+      )}
 
       {result && (
         <div className="panel">

@@ -1,5 +1,7 @@
 from contextlib import asynccontextmanager
 
+from . import env as _env  # noqa: F401 — load backend/.env
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -10,7 +12,8 @@ from .routers import auth, chat, context, mini_apps, progress, router, sessions,
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    Base.metadata.create_all(bind=engine)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
     yield
 
 
@@ -40,5 +43,16 @@ app.include_router(summary.router)
 
 
 @app.get("/")
-def health_check() -> dict[str, str]:
-    return {"status": "ok", "project": "MindPath AI"}
+def health_check() -> dict[str, str | bool | None]:
+    from .services.llm_service import LlmService
+
+    provider = LlmService.provider()
+    return {
+        "status": "ok",
+        "project": "MindPath AI",
+        "llm_provider": provider,
+        "llm_configured": LlmService.is_configured(),
+        "llm_model": LlmService.model(),
+        "gemini_configured": provider == "gemini",
+        "groq_configured": provider == "groq",
+    }

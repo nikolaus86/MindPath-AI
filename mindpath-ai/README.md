@@ -2,7 +2,7 @@
 
 MindPath AI is a full-stack self-reflection web application. It helps a user describe a personal problem, creates a structured context, routes the session to a suitable mini-app, and saves a small result or action plan.
 
-The project is built as a student MVP for an exam defense. It is intentionally simple: there is no external AI API, no diagnosis, no payment system, and no complex medical logic. The routing is deterministic and easy to explain.
+The project is built as a student MVP for an exam defense. Chat, context, routing, and mini-app results can use **Groq** or **Google Gemini** when an API key is configured. Without a key or when the API fails, the app falls back to simple rule-based text.
 
 MindPath AI is not a replacement for professional therapy, medical advice, or emergency support. It is only a self-reflection and planning tool.
 
@@ -13,7 +13,7 @@ MindPath AI is not a replacement for professional therapy, medical advice, or em
 - Dashboard with session access and mood/progress tracker.
 - Main chat with saved messages.
 - Context builder that extracts problem, emotion, goal, constraints, and summary.
-- Deterministic router that recommends a mini-app.
+- LLM-powered chat, context, router, and mini-apps via Groq or Gemini (with rule-based fallback).
 - Mini-app catalog with four working tools:
   - Problem Analysis
   - Anxiety Helper
@@ -58,6 +58,26 @@ Open two terminal windows.
 
 ### Backend
 
+Copy `backend/.env.example` to `backend/.env` and set an LLM API key.
+
+**Groq** (recommended if Gemini quota is limited) — [console.groq.com](https://console.groq.com/keys):
+
+```bash
+LLM_PROVIDER=groq
+GROQ_API_KEY=your_key_here
+```
+
+**Gemini** — [Google AI Studio](https://aistudio.google.com/apikey):
+
+```bash
+LLM_PROVIDER=gemini
+GEMINI_API_KEY=your_key_here
+```
+
+With `LLM_PROVIDER=auto` (default), Groq is used when `GROQ_API_KEY` is set, otherwise Gemini.
+
+Check config: open `http://localhost:8000/` — expect `"llm_configured": true` and `"llm_provider": "groq"` or `"gemini"`.
+
 ```bash
 cd mindpath-ai/backend
 python3 -m venv venv
@@ -65,6 +85,15 @@ source venv/bin/activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
+
+### Docker Compose
+
+```bash
+cd mindpath-ai
+docker compose up
+```
+
+The backend service loads `backend/.env` automatically. Restart after changing the key: `docker compose restart backend`.
 
 The backend runs on:
 

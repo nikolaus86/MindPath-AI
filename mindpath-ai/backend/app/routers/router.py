@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import get_current_user
 from ..database import get_db
@@ -12,13 +12,13 @@ router = APIRouter(prefix="/router", tags=["router"])
 
 
 @router.post("/{session_id}/route", response_model=RouteResponse)
-def route_session(
+async def route_session(
     session_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> RouteResponse:
-    session = SessionService.get_owned_session(db, current_user, session_id)
-    app_id, reason, context = RouterService.route_session(db, session)
+    session = await SessionService.get_owned_session(db, current_user, session_id)
+    app_id, reason, context = await RouterService.route_session(db, session)
     return RouteResponse(
         recommended_app=app_id,
         title=APP_TITLES[app_id],

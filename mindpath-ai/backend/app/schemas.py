@@ -59,6 +59,8 @@ class MessageRead(BaseModel):
 class ChatResponse(BaseModel):
     user_message: MessageRead
     assistant_message: MessageRead
+    suggested_app: str | None = None
+    suggested_app_title: str | None = None
 
 
 class ContextRead(BaseModel):
@@ -96,6 +98,11 @@ class MiniAppStart(BaseModel):
 class MiniAppAnswer(BaseModel):
     session_id: int
     answers: dict[str, Any]
+
+
+class MiniAppInsightResponse(BaseModel):
+    insight: str
+    llm_used: bool
 
 
 class MiniAppResultRead(BaseModel):

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import get_current_user
 from ..database import get_db
@@ -12,10 +12,10 @@ router = APIRouter(prefix="/summary", tags=["summary"])
 
 
 @router.get("/{session_id}", response_model=SummaryResponse)
-def get_summary(
+async def get_summary(
     session_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
-    session = SessionService.get_owned_session(db, current_user, session_id)
-    return SummaryService.build_summary(db, current_user, session)
+    session = await SessionService.get_owned_session(db, current_user, session_id)
+    return await SummaryService.build_summary(db, current_user, session)

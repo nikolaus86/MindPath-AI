@@ -1,38 +1,50 @@
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import ContextFile, Message, SessionModel
+from .llm_service import GeminiService
 
 
 class ContextService:
     @staticmethod
-    def get_latest_context(db: Session, session: SessionModel) -> ContextFile | None:
-        return db.scalar(
+    async def get_latest_context(
+        db: AsyncSession, session: SessionModel
+    ) -> ContextFile | None:
+        return await db.scalar(
             select(ContextFile)
             .where(ContextFile.session_id == session.id)
             .order_by(ContextFile.created_at.desc())
         )
 
     @staticmethod
-    def build_context(db: Session, session: SessionModel) -> ContextFile:
-        messages = list(
-            db.scalars(
-                select(Message)
-                .where(Message.session_id == session.id, Message.role == "user")
-                .order_by(Message.created_at.asc())
-            )
+    async def build_context(db: AsyncSession, session: SessionModel) -> ContextFile:
+        result = await db.scalars(
+            select(Message)
+            .where(Message.session_id == session.id, Message.role == "user")
+            .order_by(Message.created_at.asc())
         )
+        messages = list(result.all())
         user_texts = [message.text for message in messages]
         combined = " ".join(user_texts).strip()
         latest_text = user_texts[-1] if user_texts else "The user has not described a problem yet."
 
-        emotion = ContextService.detect_emotion(combined)
-        goal = ContextService.detect_goal(combined)
-        constraints = ContextService.detect_constraints(combined)
-        problem = latest_text[:500]
-        summary = f"The user describes: {problem}. Main detected emotion: {emotion}. Main goal: {goal}."
+        llm_fields = await GeminiService.build_context_fields("\n".join(user_texts))
+        if llm_fields:
+            problem = llm_fields["problem"][:500]
+            emotion = llm_fields["emotion"]
+            goal = llm_fields["goal"]
+            constraints = llm_fields["constraints"]
+            summary = llm_fields["summary"]
+        else:
+            emotion = ContextService.detect_emotion(combined)
+            goal = ContextService.detect_goal(combined)
+            constraints = ContextService.detect_constraints(combined)
+            problem = latest_text[:500]
+            summary = (
+                f"The user describes: {problem}. Main detected emotion: {emotion}. Main goal: {goal}."
+            )
 
-        existing_context = ContextService.get_latest_context(db, session)
+        existing_context = await ContextService.get_latest_context(db, session)
         if existing_context is None:
             context = ContextFile(
                 session_id=session.id,
@@ -52,8 +64,8 @@ class ContextService:
             context.summary = summary
             db.add(context)
 
-        db.commit()
-        db.refresh(context)
+        await db.commit()
+        await db.refresh(context)
         return context
 
     @staticmethod

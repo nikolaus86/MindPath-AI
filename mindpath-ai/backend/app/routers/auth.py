@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import get_current_user
 from ..database import get_db
@@ -11,17 +11,19 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/register", response_model=TokenResponse)
-def register(payload: UserCreate, db: Session = Depends(get_db)) -> TokenResponse:
-    result = AuthService.register(db, payload.email, payload.password)
+async def register(
+    payload: UserCreate, db: AsyncSession = Depends(get_db)
+) -> TokenResponse:
+    result = await AuthService.register(db, payload.email, payload.password)
     return TokenResponse(access_token=result.access_token, user=result.user)
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(payload: UserLogin, db: Session = Depends(get_db)) -> TokenResponse:
-    result = AuthService.login(db, payload.email, payload.password)
+async def login(payload: UserLogin, db: AsyncSession = Depends(get_db)) -> TokenResponse:
+    result = await AuthService.login(db, payload.email, payload.password)
     return TokenResponse(access_token=result.access_token, user=result.user)
 
 
 @router.get("/me", response_model=UserRead)
-def me(current_user: User = Depends(get_current_user)) -> User:
+async def me(current_user: User = Depends(get_current_user)) -> User:
     return current_user

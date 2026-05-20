@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import get_current_user
 from ..database import get_db
@@ -11,35 +11,35 @@ router = APIRouter(prefix="/sessions", tags=["sessions"])
 
 
 @router.post("", response_model=SessionRead)
-def create_session(
+async def create_session(
     payload: SessionCreate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> object:
-    return SessionService.create_session(db, current_user, payload.title)
+    return await SessionService.create_session(db, current_user, payload.title)
 
 
 @router.get("", response_model=list[SessionRead])
-def list_sessions(
-    db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
+async def list_sessions(
+    db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)
 ) -> object:
-    return SessionService.list_sessions(db, current_user)
+    return await SessionService.list_sessions(db, current_user)
 
 
 @router.get("/{session_id}", response_model=SessionRead)
-def get_session(
+async def get_session(
     session_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> object:
-    return SessionService.get_owned_session(db, current_user, session_id)
+    return await SessionService.get_owned_session(db, current_user, session_id)
 
 
 @router.delete("/{session_id}")
-def delete_session(
+async def delete_session(
     session_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, str]:
-    SessionService.delete_session(db, current_user, session_id)
+    await SessionService.delete_session(db, current_user, session_id)
     return {"status": "deleted"}

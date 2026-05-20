@@ -39,6 +39,11 @@ export type MiniAppDefinition = {
   questions: string[];
 };
 
+export type MiniAppInsight = {
+  insight: string;
+  llm_used: boolean;
+};
+
 export type MiniAppResult = {
   id: number;
   session_id: number;

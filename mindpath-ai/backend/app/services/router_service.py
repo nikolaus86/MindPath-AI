@@ -1,7 +1,8 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import ContextFile, SessionModel
 from .context_service import ContextService
+from .llm_service import LlmService
 
 APP_TITLES = {
     "problem-analysis": "Problem Analysis",
@@ -13,25 +14,24 @@ APP_TITLES = {
 
 class RouterService:
     @staticmethod
-    def route_session(db: Session, session: SessionModel) -> tuple[str, str, ContextFile]:
-        context = ContextService.get_latest_context(db, session)
+    async def route_session(
+        db: AsyncSession, session: SessionModel
+    ) -> tuple[str, str, ContextFile]:
+        context = await ContextService.get_latest_context(db, session)
         if context is None:
-            context = ContextService.build_context(db, session)
+            context = await ContextService.build_context(db, session)
 
-        text = f"{context.problem} {context.emotion} {context.goal} {context.summary}".lower()
-        app_id, reason = RouterService.detect_app(text)
+        context_text = (
+            f"Title: {session.title}\n"
+            f"Problem: {context.problem}\n"
+            f"Emotion: {context.emotion}\n"
+            f"Goal: {context.goal}\n"
+            f"Constraints: {context.constraints}\n"
+            f"Summary: {context.summary}"
+        )
+        app_id, reason, _used_llm = await LlmService.route_session(context_text)
         context.recommended_app = app_id
         db.add(context)
-        db.commit()
-        db.refresh(context)
+        await db.commit()
+        await db.refresh(context)
         return app_id, reason, context
-
-    @staticmethod
-    def detect_app(text: str) -> tuple[str, str]:
-        if any(word in text for word in ["anxiety", "worry", "stress", "panic", "afraid"]):
-            return "anxiety-helper", "The session contains worry, stress, or panic keywords."
-        if any(word in text for word in ["choose", "decision", "option", "unsure"]):
-            return "decision-assistant", "The session looks like a choice between options."
-        if any(word in text for word in ["goal", "plan", "improve", "habit"]):
-            return "goal-planner", "The session contains planning or improvement keywords."
-        return "problem-analysis", "The session needs basic problem structuring first."
