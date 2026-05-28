@@ -53,6 +53,5 @@ def health_check() -> dict[str, str | bool | None]:
         "llm_provider": provider,
         "llm_configured": LlmService.is_configured(),
         "llm_model": LlmService.model(),
-        "gemini_configured": provider == "gemini",
-        "groq_configured": provider == "groq",
+        "ai_gateway_configured": provider == "ai_gateway",
     }
